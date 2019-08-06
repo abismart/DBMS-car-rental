@@ -1,0 +1,166 @@
+		Number of tables used:5
+		Schema:
+			car(cid,brand,s_capacity,priceperday,modelname,fuel) primary key(cid)
+			customer(licno,name,address,phone,username) primary key(licno)
+								    foreign key(username) references login(user_name)
+			login(user_name,fname,lname,password,emailid) primary key(user_name)
+			payment(payid,cardno,name_on_card,expi_mon,expi_year,cvv,totalamt,resrvationid,carrid) foreign key(carrid) references car(cid)
+													       foreign key(resrvationid) references reservation(resid)
+			reservation(resid,pickup,dropoff,startdate,enddate,licenseno,carid,no_of_days ) primary key(resid)
+													foreign key(licenseno) references customer(licno)
+													foreign key(carid) references car(cid)
+--------------------------------------------------------------------------------------------------------------------------------------
+	----CAR DETAILS----
+		 create table car
+		(
+		cid number(10),
+		brand varchar2(50),
+		s_capacity number(10),
+		priceperday number(10),
+		modelname varchar2(50),
+		fuel varchar2(10)
+		);
+		
+		alter table car 
+		add avail number(20);
+		
+		
+		alter table car
+		add constraint c_pk primary key(cid);
+
+	----CUSTOMER DETAILS----	
+
+		create table customer
+		(
+		licno number(10),
+		name varchar2(50),
+		address varchar2(100),
+		phone number(10),
+		username varchar2(10)
+		);
+		
+		alter table customer
+		add constraint cu_pk primary key(licno);
+		
+		alter table customer
+		add constraint cus_fk foreign key(username) references login(user_name);
+		
+	----LOGIN DETAILS----
+		
+		create table login
+		(
+		user_name varchar2(10),
+		fname varchar2(20),
+		lname varchar2(20),
+		password varchar2(20),
+		emailid varchar2(20)
+		);
+		
+		alter table login
+		add constraint l_pk primary key(user_name);
+		
+	----PAYMENT DETAILS----		
+
+		create table payment
+		(
+		payid number(10),
+		cardno number(10),
+		name_on_card varchar2(10),
+		expi_mon number(10),
+		expi_year number(10)
+		cvv number(10),
+		totalamt number(10),
+		resrvationid number(10),
+		carrid number(10)
+		);
+		
+		
+		ALTER TABLE payment
+		MODIFY  totalamt DEFAULT 0;
+		
+		alter table payment
+		add constraint pay_fk foreign key(carrid) references car(cid);
+		
+		
+		alter table payment
+		add constraint pa_fk foreign key(resrvationid) references reservation(resid);
+		
+
+	----RESERVATION DETAILS----
+		
+		create table reservation
+		(
+		resid number(10),
+		pickup varchar2(20),
+		dropoff varchar2(20),
+		startdate date,
+		enddate date,	
+		licenseno number(10),
+		carid number(10),
+		no_of_days number(10)
+		);
+		
+		
+		alter table reservation
+		add constraint r_pk primary key(resid);
+		
+		alter table reservation
+		add constraint r_fk foreign key(licenseno) references customer(licno);
+				
+		alter table reservation
+		add constraint re_fk foreign key(carid) references car(cid);
+		
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+	----TRIGGER----	this trigger is called when a customer rents or returns a car to update the availability.	
+		
+		CREATE or REPLACE TRIGGER tm
+		before  update  on payment
+		for each row
+		declare
+		id car.cid%type;
+	        BEGIN
+			id:=:new.carrid;
+			update car set avail=avail-1
+			where car.cid=id;
+	        END;
+         	/
+		
+	----FUNCTION----This function is to compute total amount for the tavel.This function is called from a PHP page
+		
+		    CREATE OR REPLACE FUNCTION totalamt (lid in number)
+		    RETURN number IS
+		    total payment.totalamt%type;
+		    tot payment.totalamt%type;
+		    day reservation.no_of_days%type;
+		    invalid exception;
+		    BEGIN
+		    	if lid <= 0 then
+			    raise invalid;
+	         	else
+			   SELECT priceperday into total
+			   FROM car,customer,reservation
+			   where customer.licno=reservation.licenseno and reservation.carid=car.cid and  customer.licno=lid;
+			
+			   select no_of_days into day
+			   from reservation
+   		 	   where reservation.licenseno=lid;
+				   	
+			   total:=total * day;
+			   tot:=total;
+
+	         	   update payment
+			   set  totalamt=tot
+			   where  payment.totalamt=0;
+			 RETURN tot;
+		   end if;
+		   exception
+		   when invalid then
+			   dbms_output.put_line('L ID MUST BE GREATER THAN ZERO(0)');
+		   when no_data_found then
+			   dbms_output.put_line('NO SUCH Lid EXISTS');
+		   when others then
+			   dbms_output.put_line('ERROR');
+		   END;
+		   /
+-----------------------------------------------------------------------------------------------------------------------------------------------------------	
